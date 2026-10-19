@@ -1,0 +1,3 @@
+require('dotenv').config();
+const bcrypt=require('bcryptjs'); const {pool}=require('./db');
+(async()=>{try{const email=(process.env.SEED_ADMIN_EMAIL||'admin@pmcore.local').toLowerCase(); const password=process.env.SEED_ADMIN_PASSWORD||'ChangeMe123!'; const hash=await bcrypt.hash(password,12); await pool.query(`INSERT INTO users(name,email,password_hash,role,department,must_change_password) VALUES('PM Core Administrator',$1,$2,'SUPER_ADMIN','PM Core',true) ON CONFLICT(email) DO NOTHING`,[email,hash]); console.log(`Seed complete. Initial administrator: ${email}. Change the password on first sign-in.`);}catch(e){console.error(e);process.exitCode=1;}finally{await pool.end();}})();

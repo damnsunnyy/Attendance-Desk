@@ -1,0 +1,3 @@
+const {query}=require('../db');
+async function workingDates(from,to){if(to<from)throw Object.assign(new Error('End date must be on or after start date.'),{status:400}); const h=await query('SELECT holiday_date::text date FROM holidays WHERE holiday_date BETWEEN $1 AND $2',[from,to]); const holidaySet=new Set(h.rows.map(x=>x.date)); const days=[]; const d=new Date(`${from}T12:00:00Z`), end=new Date(`${to}T12:00:00Z`); for(;d<=end;d.setUTCDate(d.getUTCDate()+1)){const date=d.toISOString().slice(0,10); if(d.getUTCDay()!==0&&!holidaySet.has(date))days.push(date);} return days;}
+module.exports={workingDates};

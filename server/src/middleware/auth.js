@@ -1,0 +1,7 @@
+const jwt=require('jsonwebtoken'); const crypto=require('node:crypto'); const {query}=require('../db');
+const digest=s=>crypto.createHash('sha256').update(s).digest('hex');
+async function auth(req,res,next){try{const token=(req.headers.authorization||'').replace(/^Bearer\s+/i,''); if(!token)return res.status(401).json({error:'Sign in to continue.'}); const payload=jwt.verify(token,process.env.JWT_ACCESS_SECRET); const r=await query('SELECT id,name,email,role,department,emp_code,is_active,must_change_password FROM users WHERE id=$1',[payload.sub]); if(!r.rowCount||!r.rows[0].is_active)return res.status(401).json({error:'Account is inactive or unavailable.'}); req.user=r.rows[0]; next();}catch(e){return res.status(401).json({error:'Your session has expired. Please sign in again.'});}}
+const allow=(...roles)=>(req,res,next)=>roles.includes(req.user.role)?next():res.status(403).json({error:'You do not have access to this action.'});
+async function audit(req,action,table,id,details={}){await query('INSERT INTO audit_logs(actor_id,action,target_table,target_id,details,ip_address) VALUES($1,$2,$3,$4,$5,$6)',[req.user?.id,action,table,id,JSON.stringify(details),req.ip]);}
+async function notify(userId,title,body,kind='INFO'){if(userId)await query('INSERT INTO notifications(user_id,title,body,kind) VALUES($1,$2,$3,$4)',[userId,title,body,kind]);}
+module.exports={auth,allow,audit,notify,digest};

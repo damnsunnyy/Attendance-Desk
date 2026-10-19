@@ -1,0 +1,40 @@
+{
+  "name": "pm-core-attendance-management",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PM Core attendance and leave management system",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "node --watch server/src/index.js",
+    "dev:web": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "deploy": "npm run build && gh-pages -d dist",
+    "start": "node server/src/index.js",
+    "migrate": "node server/src/migrate.js",
+    "seed": "node server/src/seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.2",
+    "nodemailer": "^10.1.7",
+    "pg": "^8.13.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "gh-pages": "^6.3.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^6.0.5"
+  }
+}

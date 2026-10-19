@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pmcore
+      POSTGRES_PASSWORD: pmcore_local_only
+      POSTGRES_DB: pmcore
+    ports: ["5432:5432"]
+    volumes: ["pmcore_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pmcore -d pmcore"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://pmcore:pmcore_local_only@db:5432/pmcore
+      WEB_ORIGIN: http://localhost:8080
+    ports: ["4000:4000"]
+    depends_on:
+      db: {condition: service_healthy}
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports: ["8080:80"]
+    volumes: ["./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro"]
+    depends_on: [app]
+volumes:
+  pmcore_data:
