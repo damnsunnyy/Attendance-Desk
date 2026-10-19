@@ -1,42 +1,605 @@
-import React,{useEffect,useMemo,useState} from 'react';import{createRoot}from'react-dom/client';import{Activity,ArrowDownToLine,ArrowLeft,ArrowRight,Bell,CalendarDays,Check,ChevronDown,CircleHelp,Clock3,Download,FileClock,FilePlus2,Filter,Home,LayoutDashboard,LogOut,Menu,MoreHorizontal,Plus,Search,Settings,ShieldCheck,SlidersHorizontal,Users,Wallet, X,CheckCircle2, XCircle, Upload, UserRound, CalendarCheck, ClipboardList, CircleDollarSign, AlertCircle}from'lucide-react';import'./style.css';
-const API=import.meta.env.VITE_API_BASE||'/api';const stored=()=>JSON.parse(localStorage.getItem('pm-session')||'null');
-async function call(path,opts={}){const s=stored();const headers={...(opts.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(opts.headers||{}),...(s?.accessToken?{Authorization:`Bearer ${s.accessToken}`}:{})};let r=await fetch(API+path,{...opts,headers});if(r.status===401&&s?.refreshToken){const rr=await fetch(API+'/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refreshToken:s.refreshToken})});if(rr.ok){const n=await rr.json();localStorage.setItem('pm-session',JSON.stringify({...s,...n}));headers.Authorization=`Bearer ${n.accessToken}`;r=await fetch(API+path,{...opts,headers});}}const data=await r.json().catch(()=>({}));if(!r.ok)throw Error(data.error||'Something went wrong');return data;}
-async function download(path,name){const s=stored(),r=await fetch(API+path,{headers:s?.accessToken?{Authorization:`Bearer ${s.accessToken}`}:{}});if(!r.ok){const e=await r.json().catch(()=>({}));throw Error(e.error||'Could not download report')}const b=await r.blob(),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();URL.revokeObjectURL(a.href);}
-const day=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—';const short=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'—';const cls=s=>`status ${String(s||'').toLowerCase().replaceAll('_','-')}`;const money=n=>Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:1});
-function Login({onLogin}){const[email,setEmail]=useState(import.meta.env.DEV?'admin@pmcore.local':''),[password,setPassword]=useState(import.meta.env.DEV?'ChangeMe123!':''),[err,setErr]=useState(''),[busy,setBusy]=useState(false);async function submit(e){e.preventDefault();setBusy(true);setErr('');try{const s=await call('/auth/login',{method:'POST',body:JSON.stringify({email,password})});localStorage.setItem('pm-session',JSON.stringify(s));onLogin(s.user);}catch(e){setErr(e.message)}finally{setBusy(false)}}return <div className="login-shell"><aside className="login-brand"><div className="brand-mark">PM</div><span className="eyebrow">PM CORE · PEOPLE OPERATIONS</span><h1>A clearer way to<br/><em>manage your time.</em></h1><p>Attendance and leave, brought together in one calm workspace for the PM Core team.</p><div className="login-art"><div className="art-ring r1"/><div className="art-ring r2"/><div className="art-card"><div className="art-dot"/><div><b>Your team, in sync</b><small>Leave plans made visible.</small></div><CheckCircle2/></div></div><small className="login-foot">PRIVATE WORKSPACE · PM CORE DEPARTMENT</small></aside><main className="login-main"><div className="login-form"><div className="mobile-mark">PM <span>CORE</span></div><span className="eyebrow blue">WELCOME BACK</span><h2>Sign in to PM Core</h2><p className="muted">Use your company account to continue.</p><form onSubmit={submit}><label>Work email<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.com"/></label><label>Password<input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter your password"/></label>{err&&<div className="error-msg"><AlertCircle size={16}/>{err}</div>}<button className="primary full" disabled={busy}>{busy?'Signing in…':'Sign in'}<ArrowRight size={17}/></button></form><div className="login-hint"><ShieldCheck size={17}/><span>Your account is protected with secure sign-in.</span></div>{import.meta.env.DEV&&<div className="login-demo">Local preview credentials: <b>admin@pmcore.local</b> · <b>ChangeMe123!</b></div>}<div className="copyright">© 2026 PM Core · Attendance & Leave Management</div></div></main></div>}
-function App(){const[session,setSession]=useState(stored()),[page,setPage]=useState('Overview'),[data,setData]=useState(null),[apps,setApps]=useState([]),[employees,setEmployees]=useState([]),[managers,setManagers]=useState([]),[balances,setBalances]=useState([]),[holidays,setHolidays]=useState([]),[notifications,setNotifications]=useState([]),[report,setReport]=useState(null),[todayAtt,setTodayAtt]=useState(null),[loading,setLoading]=useState(false),[toast,setToast]=useState(''),[modal,setModal]=useState(''),[search,setSearch]=useState(''),[nav,setNav]=useState(false);const user=session?.user;const admin=['ADMIN','SUPER_ADMIN'].includes(user?.role),manager=user?.role==='MANAGER';const canReview=admin||manager;
-const flash=t=>{setToast(t);setTimeout(()=>setToast(''),3200)};async function load(){if(!user)return;setLoading(true);try{const [d,a,n,t]=await Promise.all([call('/dashboard'),call('/applications'),call('/notifications'),call('/attendance/today')]);setData(d);setApps(a);setNotifications(n);setTodayAtt(t);if(canReview){const[e,m,b,h,r]=await Promise.all([call('/employees'),admin?call('/managers'):Promise.resolve([]),call('/balances'),call('/holidays'),admin?call('/reports/summary'):Promise.resolve(null)]);setEmployees(e);setManagers(m);setBalances(b);setHolidays(h);setReport(r);}else{const[b,h]=await Promise.all([call('/balances/me'),call('/holidays')]);setBalances(b);setHolidays(h);}}catch(e){flash(e.message)}finally{setLoading(false)}}useEffect(()=>{load();if(user?.must_change_password)setModal('password')},[user?.id]);const navItems=[['Overview',LayoutDashboard],['Attendance',Clock3],['My requests',ClipboardList],['Leave calendar',CalendarDays],...(canReview?[['Balances',Wallet],...(admin?[['Reports',Activity]]:[])]:[]),['Notifications',Bell]];const pending=apps.filter(x=>['PENDING','L1_REVIEW','L2_REVIEW'].includes(x.status));
-async function logout(){try{await call('/auth/logout',{method:'POST'})}catch{}localStorage.removeItem('pm-session');setSession(null)}async function action(a,act){let comment='';if(act==='REJECT'||act==='ESCALATE'){comment=prompt(act==='REJECT'?'Add a reason for declining this request:':'Add a note for the L2 manager:')||'';if(act==='REJECT'&&comment.trim().length<3)return flash('A rejection reason is required.');}try{await call(`/applications/${a.id}/action`,{method:'POST',body:JSON.stringify({action:act,comment})});flash(`Request ${act.toLowerCase()}d.`);load()}catch(e){flash(e.message)}}
-if(!user)return <Login onLogin={u=>{const s=stored();setSession(s);setPage('Overview')}}/>;
-const visibleApps=useMemo(()=>apps.filter(a=>`${a.employee_name} ${a.emp_code} ${a.status} ${a.reason}`.toLowerCase().includes(search.toLowerCase())),[apps,search]);
-return <div className="app-shell"><aside className={`sidebar ${nav?'open':''}`}><div className="logo-row"><div className="brand-mark small">PM</div><div className="brand-name">PM CORE<span>PEOPLE OPERATIONS</span></div><button className="icon-btn mobile-close" onClick={()=>setNav(false)}><X/></button></div><div className="workspace"><div className="workspace-icon">P</div><div><b>PM Core</b><small>Department workspace</small></div><ChevronDown size={15}/></div><div className="side-label">WORKSPACE</div><nav>{navItems.map(([name,Icon])=><button className={`nav-item ${page===name?'active':''}`} key={name} onClick={()=>{setPage(name);setNav(false)}}><Icon size={18}/><span>{name}</span>{name==='My requests'&&canReview&&pending.length>0&&<i>{pending.length}</i>}</button>)}</nav><div className="side-label management-label">MANAGE</div><nav>{(admin?[['Employees',Users],['Holiday calendar',CalendarDays],['Audit log',FileClock],['Settings',Settings]]:manager?[['Holiday calendar',CalendarDays]]:[]).map(([name,Icon])=><button className={`nav-item ${page===name?'active':''}`} key={name} onClick={()=>{setPage(name);setNav(false)}}><Icon size={18}/><span>{name}</span></button>)}</nav><div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><CircleHelp size={17}/></div><b>Need a hand?</b><p>Get help with your leave or account.</p><button onClick={()=>flash('Contact your PM Core administrator for support.')}>Contact support <ArrowRight size={14}/></button></div><button className="profile-row" onClick={()=>setModal('profile')}><div className="avatar">{user.name.split(' ').map(n=>n[0]).slice(0,2).join('')}</div><div className="profile-copy"><b>{user.name}</b><small>{user.role.replace('_',' ')}</small></div><MoreHorizontal size={19}/></button></div></aside><main className="main-area"><header className="topbar"><button className="icon-btn menu-btn" onClick={()=>setNav(true)}><Menu/></button><div className="breadcrumbs">Workspace <span>/</span> <b>{page}</b></div><div className="top-actions"><div className="today-label"><CalendarDays size={16}/>{new Date().toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}</div><button className="icon-btn notification-btn" onClick={()=>setPage('Notifications')}><Bell size={19}/>{notifications.some(n=>!n.read_at)&&<i/>}</button><span className="top-divider"/><div className="avatar top-avatar">{user.name.split(' ').map(n=>n[0]).slice(0,2).join('')}</div><button className="logout-btn" onClick={logout} title="Sign out"><LogOut size={17}/></button></div></header><div className="content">{loading&&<div className="loading-line"/>}{page==='Overview'&&<Overview user={user} data={data} apps={apps} balances={admin?data?.balances||[]:balances} onPage={setPage} onApply={()=>setModal('apply')} onRefresh={load} onToast={flash}/>} {page==='Attendance'&&<AttendancePage user={user} employees={employees} today={todayAtt} reload={load} onToast={flash}/>} {page==='My requests'&&<Requests apps={visibleApps} user={user} search={search} setSearch={setSearch} canReview={canReview} onAction={action} onApply={()=>setModal('apply')} onRefresh={load}/>} {page==='Leave calendar'&&<CalendarPage holidays={holidays} onApply={()=>setModal('apply')}/>} {page==='Holiday calendar'&&<HolidayAdmin holidays={holidays} reload={load} onToast={flash}/>} {page==='Employees'&&<Employees user={user} employees={employees} managers={managers} reload={load} onToast={flash}/>} {page==='Balances'&&<BalancePage rows={balances} reload={load} onToast={flash}/>} {page==='Reports'&&<Reports report={report} onToast={flash}/>} {page==='Notifications'&&<Notifications items={notifications} reload={load}/>} {page==='Audit log'&&<Audit/>}{page==='Settings'&&<SettingsPage user={user} onToast={flash}/>}</div><footer className="app-footer"><span>© 2026 PM Core · Attendance & Leave</span><span>Secure company workspace <ShieldCheck size={14}/></span></footer></main>{modal&&<Modal type={modal} close={()=>{if(!user?.must_change_password)setModal('')}} onChangePassword={()=>setModal('password')} employees={employees} managers={managers} balances={balances} holidays={holidays} reload={load} onToast={flash} user={user} onLogout={logout}/>} {toast&&<div className="toast"><CheckCircle2 size={17}/>{toast}</div>}</div>}
-function PageHead({eyebrow,title,desc,action}){return <div className="page-head"><div><div className="eyebrow blue">{eyebrow}</div><h1>{title}</h1><p>{desc}</p></div>{action&&<div className="head-action">{action}</div>}</div>}
-function Overview({user,data,apps,balances,onPage,onApply,onRefresh,onToast}){const counts=Object.fromEntries((data?.counts||[]).map(x=>[x.status,x.count]));const remaining=balances.reduce((a,x)=>a+Number(x.balance||0),0);const pending=apps.filter(x=>['PENDING','L1_REVIEW','L2_REVIEW'].includes(x.status));return <><PageHead eyebrow="YOUR WORKSPACE" title={`Good ${new Date().getHours()<12?'morning':new Date().getHours()<17?'afternoon':'evening'}, ${user.name.split(' ')[0]}`} desc="Here’s what’s happening across PM Core today." action={<button className="primary" onClick={onApply}><Plus size={17}/> New leave request</button>}/><div className="banner"><div className="banner-orb"><CalendarCheck size={23}/></div><div className="banner-text"><b>Plan your time with confidence</b><span>Submit a leave request and keep your team in the loop.</span></div><button onClick={onApply}>Request leave <ArrowRight size={16}/></button><div className="banner-decoration"/></div><div className="section-title"><div><h2>At a glance</h2><p>Your leave and attendance summary</p></div><button className="text-action" onClick={onRefresh}><Activity size={15}/> Refresh</button></div><div className="stats-grid"><Stat icon={Clock3}label={canManage(user)?'Awaiting review':'Requests pending'}value={canManage(user)?(counts.PENDING||0)+(counts.L1_REVIEW||0)+(counts.L2_REVIEW||0):(counts.PENDING||0)+(counts.L1_REVIEW||0)+(counts.L2_REVIEW||0)}tone="blue" hint={canManage(user)?'Across your team':'In your approval flow'}/><Stat icon={CalendarCheck}label="Approved this period"value={counts.APPROVED||0}tone="green" hint="Approved leave requests"/><Stat icon={Wallet}label="Available leave"value={money(remaining)}tone="purple"hint="Days across leave types"/><Stat icon={Users}label="PM Core team"value={data?.people?.active??'—'}tone="orange"hint="Active employees"/></div><div className="dashboard-grid"><section className="panel recent-panel"><div className="panel-head"><div><h3>{canManage(user)?'Recent team requests':'Recent requests'}</h3><p>The latest updates to leave applications</p></div><button className="text-action" onClick={()=>onPage('My requests')}>View all <ArrowRight size={15}/></button></div>{apps.length?<div className="table-wrap"><table><thead><tr><th>EMPLOYEE</th><th>DATES</th><th>TYPE</th><th>STATUS</th><th/></tr></thead><tbody>{apps.slice(0,5).map(a=><tr key={a.id}><td><div className="person-cell"><div className="avatar mini">{(a.employee_name||user.name).split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><b>{a.employee_name||user.name}</b><small>{a.emp_code||'My request'}</small></div></div></td><td>{short(a.from_date)} – {short(a.to_date)}<small className="subline">{a.working_days} working days</small></td><td>{a.is_lwp?'LWP':a.is_combined?'Combined':'Leave'}</td><td><span className={cls(a.status)}>{labelStatus(a.status)}</span></td><td><button className="icon-btn row-arrow" onClick={()=>onPage('My requests')}><ArrowRight size={16}/></button></td></tr>)}</tbody></table></div>:<Empty icon={ClipboardList}title="No requests yet"body="Your recent leave requests will show up here."/>}</section><div className="right-stack"><section className="panel balance-panel"><div className="panel-head"><div><h3>{canManage(user)&&user.role!=='EMPLOYEE'?'Team leave balance':'My leave balance'}</h3><p>Available days this period</p></div><button className="icon-btn" onClick={()=>onPage('Balances')}><ArrowRight size={16}/></button></div><div className="balance-list">{balances.length?balances.map(b=><div className="balance-item" key={b.code}><div className={`balance-icon ${b.code.toLowerCase()}`}>{b.code==='CL'?'C':b.code==='SL'?'S':'+'}</div><div className="balance-name"><b>{b.name}</b><div className="progress"><i style={{width:`${Math.min(100,Number(b.allocated)?100*Number(b.balance)/Number(b.allocated):0)}%`}}/></div></div><div className="balance-number"><b>{money(b.balance)}</b><small>of {money(b.allocated)} d</small></div></div>):<div className="empty-inline">Leave balances will appear here.</div>}</div><button className="panel-link" onClick={()=>onPage(canManage(user)?'Balances':'My requests')}>View balance details <ArrowRight size={15}/></button></section><section className="tip-card"><div className="tip-icon"><ShieldCheck size={19}/></div><div><b>Keep your team in sync</b><p>Give your manager a heads-up before you submit a leave request.</p><button onClick={onApply}>Start a request <ArrowRight size={14}/></button></div></section></div></div><div className="section-title lower-title"><div><h2>How it works</h2><p>A simple, transparent approval flow</p></div></div><div className="steps-grid"><Step num="01"title="Submit your request"body="Choose dates, add a reason and review your balance."/><Step num="02"title="Manager review"body="Your line manager reviews the request and can escalate it."/><Step num="03"title="Stay in the loop"body="Follow every update from your requests page."/></div></>}
-function canManage(user){return ['ADMIN','SUPER_ADMIN','MANAGER'].includes(user.role)}function labelStatus(s){return ({PENDING:'Pending',L1_REVIEW:'L1 review',L2_REVIEW:'L2 review',APPROVED:'Approved',REJECTED:'Declined',CANCELLED:'Cancelled'})[s]||s}function Stat({icon:Icon,label,value,tone,hint}){return <div className="stat-card"><div className={`stat-icon ${tone}`}><Icon size={19}/></div><div className="stat-label">{label}</div><b className="stat-value">{value}</b><small>{hint}</small></div>}
-function AttendancePage({user,employees=[],today,reload,onToast}){const admin=['ADMIN','SUPER_ADMIN'].includes(user.role),canTeam=admin||user.role==='MANAGER';const[rows,setRows]=useState([]),[corrections,setCorrections]=useState([]),[busy,setBusy]=useState(false),[modal,setModal]=useState('');const now=new Date(),first=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`,last=now.toLocaleDateString('en-CA');async function refresh(){try{const[a,c]=await Promise.all([call(`/attendance?from=${first}&to=${last}`),canTeam?call('/attendance/corrections'):Promise.resolve([])]);setRows(a);setCorrections(c);}catch(e){onToast(e.message)}}useEffect(()=>{refresh()},[user.id]);async function punch(kind){setBusy(true);try{await call(`/attendance/${kind}`,{method:'POST'});onToast(kind==='check-in'?'You are checked in.':'You are checked out.');reload();refresh()}catch(e){onToast(e.message)}finally{setBusy(false)}}async function decision(c,action){let comment='';if(action==='REJECT'){comment=prompt('Add a reason for rejecting this correction:')||'';if(comment.trim().length<3)return onToast('A review reason is required.')}try{await call(`/attendance/corrections/${c.id}/action`,{method:'POST',body:JSON.stringify({action,comment})});onToast(`Correction ${action.toLowerCase()}d.`);refresh()}catch(e){onToast(e.message)}}const rec=today?.record;return <><PageHead eyebrow="TIME & ATTENDANCE" title={canTeam?'Team attendance':'My attendance'} desc="Record your workday and review attendance activity for this month." action={canTeam&&<div className="head-actions">{user.role==='MANAGER'&&<button className="secondary-btn" onClick={()=>setModal('comp')}><Plus size={15}/> Grant Comp Off</button>}<button className="secondary-btn" onClick={()=>download(`/reports/attendance.csv?from=${first}&to=${last}`,'pm-core-attendance.csv').catch(onToast)}><Download size={15}/> Export</button></div>}/><div className="attendance-hero"><div className="att-icon"><Clock3 size={22}/></div><div className="att-summary"><small>TODAY · {day(today?.date)}</small><h2>{rec?.check_in_at?rec.check_out_at?'Workday complete':'You are checked in':'Start your workday'}</h2><p>{rec?.check_in_at?`Checked in at ${new Date(rec.check_in_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}${rec.check_out_at?` · Checked out at ${new Date(rec.check_out_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}`:''}`:today?.day_type==='WEEKLY_OFF'?'Sunday · weekly off':today?.day_type==='HOLIDAY'?'Company holiday':'Check in once you begin work.'}</p></div><div className="att-buttons">{!rec?.check_in_at?<button className="primary" disabled={busy} onClick={()=>punch('check-in')}><CheckCircle2 size={16}/> Check in</button>:!rec.check_out_at?<button className="secondary-btn" disabled={busy} onClick={()=>punch('check-out')}><LogOut size={16}/> Check out</button>:<span className={cls(rec.status)}>{rec.status==='LATE'?'Late':'Present'}</span>}<button className="text-action" onClick={()=>setModal('correction')}>Request correction</button></div></div>{canTeam&&corrections.filter(x=>x.status==='PENDING').length>0&&<section className="panel correction-panel"><div className="panel-head"><div><h3>Attendance corrections</h3><p>Requests awaiting manager review</p></div><span className="status pending">{corrections.filter(x=>x.status==='PENDING').length} pending</span></div>{corrections.filter(x=>x.status==='PENDING').map(c=><div className="correction-row" key={c.id}><div><b>{c.employee_name} · {c.emp_code}</b><small>{day(c.work_date)} · {c.reason}</small></div><span>{c.requested_check_in?new Date(c.requested_check_in).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'—'} → {c.requested_check_out?new Date(c.requested_check_out).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'—'}</span><div className="table-actions"><button className="approve-btn" onClick={()=>decision(c,'APPROVE')}><Check size={15}/></button><button className="decline-btn" onClick={()=>decision(c,'REJECT')}><X size={15}/></button></div></div>)}</section>}<section className="panel directory-panel attendance-table"><div className="panel-head"><div><h3>{canTeam?'PM Core attendance':'Attendance history'}</h3><p>{now.toLocaleDateString('en-IN',{month:'long',year:'numeric'})} · checked-in workdays</p></div><span className="type-tag">{rows.length} records</span></div><div className="table-wrap"><table><thead><tr>{canTeam&&<th>EMPLOYEE</th>}<th>DATE</th><th>CHECK IN</th><th>CHECK OUT</th><th>HOURS</th><th>STATUS</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}>{canTeam&&<td><div className="person-cell"><div className="avatar mini">{r.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><b>{r.name}</b><small>{r.emp_code}</small></div></div></td>}<td>{day(r.work_date)}</td><td>{r.check_in_at?new Date(r.check_in_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'—'}</td><td>{r.check_out_at?new Date(r.check_out_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'—'}</td><td>{r.check_in_at&&r.check_out_at?`${Math.max(0,(new Date(r.check_out_at)-new Date(r.check_in_at))/3600000).toFixed(1)} h`:'—'}</td><td><span className={cls(r.status)}>{labelStatus(r.status)||r.status}</span></td></tr>)}</tbody></table>{!rows.length&&<Empty icon={Clock3}title="No attendance records yet"body="Check in to start recording your workday."/>}</div><div className="table-foot">Attendance history for the current month <span>Check-in times use PM Core local time.</span></div></section>{modal&&<Modal type={modal} close={()=>setModal('')} employees={employees} reload={()=>{refresh();reload()}} onToast={onToast}/>}</>}
-function Requests({apps,user,search,setSearch,canReview,onAction,onApply,onRefresh}){return <><PageHead eyebrow="LEAVE MANAGEMENT" title={canReview?'Leave requests':'My leave requests'} desc={canReview?'Review and track leave requests across the PM Core team.':'Track your applications and stay up to date on each decision.'} action={!canReview&&<button className="primary" onClick={onApply}><Plus size={17}/> New request</button>}/><section className="panel request-panel"><div className="list-toolbar"><div className="searchbox"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder={canReview?'Search by employee, ID or status':'Search your requests'}/></div><button className="secondary-btn" onClick={onRefresh}><Activity size={15}/> Refresh</button><button className="secondary-btn"><Filter size={15}/> Filters</button></div>{apps.length?<div className="table-wrap"><table><thead><tr>{canReview&&<th>EMPLOYEE</th>}<th>DATES</th><th>DAYS</th><th>LEAVE TYPE</th><th>REASON</th><th>STATUS</th>{canReview&&<th>ACTION</th>}</tr></thead><tbody>{apps.map(a=><tr key={a.id}>{canReview&&<td><div className="person-cell"><div className="avatar mini">{(a.employee_name||'PM').split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><b>{a.employee_name}</b><small>{a.emp_code}</small></div></div></td>}<td>{day(a.from_date)}<small className="subline">to {day(a.to_date)}</small></td><td>{a.working_days} days</td><td>{a.is_lwp?<span className="type-tag lwp">Leave without pay</span>:a.is_combined?<span className="type-tag">Combined</span>:a.allocations?.map(x=>x.name).join(', ')||'Leave'}</td><td className="reason-cell" title={a.reason}>{a.reason}</td><td><span className={cls(a.status)}>{labelStatus(a.status)}</span></td>{canReview&&<td><div className="table-actions">{['PENDING','L1_REVIEW','L2_REVIEW'].includes(a.status)&&<><button className="approve-btn" title="Approve" onClick={()=>onAction(a,'APPROVE')}><Check size={15}/></button><button className="decline-btn" title="Decline" onClick={()=>onAction(a,'REJECT')}><X size={15}/></button>{a.status!=='L2_REVIEW'&&<button className="escalate-btn" title="Escalate" onClick={()=>onAction(a,'ESCALATE')}><ArrowRight size={15}/></button>}</>}</div></td>}</tr>)}</tbody></table></div>:<Empty icon={ClipboardList}title="No leave requests found"body="When a request is submitted, it will appear here."/>}<div className="table-foot">Showing {apps.length} {apps.length===1?'request':'requests'} <span>PM Core · Current leave period</span></div></section></>}
-function CalendarPage({holidays,onApply}){const[month,setMonth]=useState(new Date());const y=month.getFullYear(),m=month.getMonth(),start=new Date(y,m,1),offset=(start.getDay()+6)%7,days=new Date(y,m+1,0).getDate();const map=Object.fromEntries(holidays.map(h=>[h.date,h]));return <><PageHead eyebrow="TIME & PLANNING" title="Leave calendar" desc="See upcoming public holidays and plan time away with your team." action={<button className="primary" onClick={onApply}><Plus size={17}/> Request leave</button>}/><div className="calendar-layout"><section className="panel calendar-panel"><div className="calendar-nav"><button className="icon-btn" onClick={()=>setMonth(new Date(y,m-1,1))}><ArrowLeft size={17}/></button><h2>{month.toLocaleDateString('en-IN',{month:'long',year:'numeric'})}</h2><button className="icon-btn" onClick={()=>setMonth(new Date(y,m+1,1))}><ArrowRight size={17}/></button><button className="text-action today-button" onClick={()=>setMonth(new Date())}>Today</button></div><div className="calendar-grid weekday-row">{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=><div key={x}>{x}</div>)}</div><div className="calendar-grid date-grid">{Array.from({length:offset},(_,i)=><div className="calendar-day outside" key={'o'+i}/>)}{Array.from({length:days},(_,i)=>{const d=new Date(y,m,i+1),key=`${y}-${String(m+1).padStart(2,'0')}-${String(i+1).padStart(2,'0')}`,holiday=map[key],sun=d.getDay()===0;return <div className={`calendar-day ${sun?'sunday':''} ${holiday?'holiday-day':''} ${key===new Date().toLocaleDateString('en-CA')?'today':''}`} key={i}><span>{i+1}</span>{holiday&&<small title={holiday.name}>{holiday.name}</small>}{sun&&!holiday&&<small>Sunday</small>}</div>})}</div><div className="calendar-legend"><span><i className="legend-holiday"/>Company holiday</span><span><i className="legend-sunday"/>Sunday</span></div></section><section className="panel holiday-list"><div className="panel-head"><div><h3>Upcoming holidays</h3><p>PM Core holiday calendar</p></div><CalendarDays size={18} className="muted-icon"/></div>{holidays.filter(x=>x.date>=new Date().toLocaleDateString('en-CA')).slice(0,8).map(h=><div className="holiday-row" key={h.id}><div className="holiday-date"><b>{new Date(h.date+'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit'})}</b><small>{new Date(h.date+'T12:00:00').toLocaleDateString('en-IN',{month:'short'})}</small></div><div><b>{h.name}</b><small>{h.type==='national'?'National holiday':'Optional holiday'}</small></div><span className="holiday-dot"/></div>)}{holidays.length===0&&<Empty icon={CalendarDays}title="No holidays added"body="The holiday schedule will show here."/>}</section></div></>}
-function Empty({icon:Icon,title,body}){return <div className="empty-state"><div className="empty-icon"><Icon size={20}/></div><b>{title}</b><p>{body}</p></div>}function Step({num,title,body}){return <div className="step-card"><div className="step-num">{num}</div><b>{title}</b><p>{body}</p></div>}
-function Employees({user,employees,managers,reload,onToast}){const[search,setSearch]=useState('');const rows=employees.filter(e=>(e.name+e.emp_code+e.department+e.email).toLowerCase().includes(search.toLowerCase()));return <><PageHead eyebrow="PEOPLE DIRECTORY" title="Employees" desc="Manage the PM Core team, their reporting lines and account status." action={<div className="head-actions"><button className="secondary-btn" onClick={()=>window.dispatchEvent(new Event('add-staff'))}><Plus size={16}/> Add manager / admin</button><button className="secondary-btn" onClick={()=>window.dispatchEvent(new Event('grant-comp'))}><Plus size={16}/> Grant Comp Off</button><button className="primary" onClick={()=>window.dispatchEvent(new Event('add-employee'))}><Plus size={17}/> Add employee</button></div>}/><div className="directory-cards"><Stat icon={Users}label="Total employees"value={employees.length}tone="blue"hint="PM Core directory"/><Stat icon={CheckCircle2}label="Active accounts"value={employees.filter(e=>e.is_active).length}tone="green"hint="Can access workspace"/><Stat icon={UserRound}label="Departments"value={new Set(employees.map(e=>e.department)).size}tone="purple"hint="Active departments"/></div><section className="panel directory-panel"><div className="list-toolbar"><div className="searchbox"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search employees"/></div><button className="secondary-btn" onClick={()=>document.getElementById('balance-import').click()}><Upload size={15}/> Import balances</button><input id="balance-import" type="file" accept=".csv" hidden onChange={async e=>{if(!e.target.files[0])return;const f=new FormData();f.append('file',e.target.files[0]);try{const r=await call('/import/balances',{method:'POST',body:f});onToast(`Imported ${r.imported} balances · ${r.errors.length} row errors`);reload()}catch(x){onToast(x.message)}e.target.value=''}}/><button className="secondary-btn" onClick={()=>window.dispatchEvent(new Event('add-employee'))}><Plus size={15}/> Add employee</button></div><div className="table-wrap"><table><thead><tr><th>EMPLOYEE</th><th>EMPLOYEE ID</th><th>DEPARTMENT</th><th>JOINED</th><th>LINE MANAGER</th><th>STATUS</th></tr></thead><tbody>{rows.map(e=><tr key={e.id}><td><div className="person-cell"><div className="avatar mini">{e.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><b>{e.name}</b><small>{e.email}</small></div></div></td><td>{e.emp_code}</td><td>{e.department}</td><td>{day(e.joining_date)}</td><td>{e.l1_manager_name||'—'}</td><td><span className={`status ${e.is_active?'approved':'cancelled'}`}>{e.is_active?'Active':'Inactive'}</span></td></tr>)}</tbody></table>{!rows.length&&<Empty icon={Users}title="No employees found"body="Add an employee or change your search."/>}</div><div className="table-foot">{rows.length} employees <span>New joiner balances are allocated automatically.</span></div></section><EmployeeListener managers={managers} reload={reload} onToast={onToast}/><StaffListener user={user} reload={reload} onToast={onToast}/><CompListener employees={employees} reload={reload} onToast={onToast}/></>}
-function EmployeeListener({managers,reload,onToast}){const[modal,setModal]=useState(false);useEffect(()=>{const fn=()=>setModal(true);window.addEventListener('add-employee',fn);return()=>window.removeEventListener('add-employee',fn)},[]);return modal&&<Modal type="employee" managers={managers} close={()=>setModal(false)} reload={reload} onToast={onToast}/>}
-function StaffListener({user,reload,onToast}){const[modal,setModal]=useState(false);useEffect(()=>{const fn=()=>setModal(true);window.addEventListener('add-staff',fn);return()=>window.removeEventListener('add-staff',fn)},[]);return modal&&<Modal type="staff" user={user} close={()=>setModal(false)} reload={reload} onToast={onToast}/> }
-function CompListener({employees,reload,onToast}){const[modal,setModal]=useState(false);useEffect(()=>{const fn=()=>setModal(true);window.addEventListener('grant-comp',fn);return()=>window.removeEventListener('grant-comp',fn)},[]);return modal&&<Modal type="comp" employees={employees} close={()=>setModal(false)} reload={reload} onToast={onToast}/>}
-function HolidayAdmin({holidays,reload,onToast}){return <><PageHead eyebrow="COMPANY CALENDAR" title="Holiday calendar" desc="Keep the PM Core calendar up to date for accurate leave calculations." action={<button className="primary" onClick={()=>document.getElementById('holiday-import').click()}><Upload size={16}/> Import CSV</button>}/><input id="holiday-import" hidden type="file" accept=".csv" onChange={async e=>{if(!e.target.files[0])return;const f=new FormData();f.append('file',e.target.files[0]);try{const r=await call('/import/holidays',{method:'POST',body:f});onToast(`Imported ${r.imported} holidays · ${r.errors.length} row errors`);reload()}catch(x){onToast(x.message)}e.target.value=''}}/><section className="panel directory-panel"><div className="panel-head"><div><h3>Company holidays</h3><p>{holidays.length} dates scheduled</p></div><button className="secondary-btn" onClick={()=>window.dispatchEvent(new Event('add-holiday'))}><Plus size={15}/> Add holiday</button></div><div className="table-wrap"><table><thead><tr><th>DATE</th><th>HOLIDAY</th><th>TYPE</th><th>YEAR</th><th/></tr></thead><tbody>{holidays.map(h=><tr key={h.id}><td>{day(h.date)}</td><td><b>{h.name}</b></td><td><span className="type-tag">{h.type}</span></td><td>{h.year}</td><td><button className="decline-btn" onClick={async()=>{if(!confirm(`Remove ${h.name}?`))return;try{await call(`/holidays/${h.id}`,{method:'DELETE'});reload();onToast('Holiday removed.')}catch(e){onToast(e.message)}}}><X size={15}/></button></td></tr>)}</tbody></table>{!holidays.length&&<Empty icon={CalendarDays}title="No holidays scheduled"body="Add company holidays to exclude them from working day calculations."/>}</div></section><HolidayListener reload={reload} onToast={onToast}/></>}
-function HolidayListener({reload,onToast}){const[open,setOpen]=useState(false);useEffect(()=>{const fn=()=>setOpen(true);window.addEventListener('add-holiday',fn);return()=>window.removeEventListener('add-holiday',fn)},[]);return open&&<Modal type="holiday" close={()=>setOpen(false)} reload={reload} onToast={onToast}/>}
-function BalancePage({rows,reload,onToast}){const[search,setSearch]=useState('');const[modal,setModal]=useState(null);const filtered=rows.filter(r=>`${r.name} ${r.emp_code} ${r.leave_type} ${r.department}`.toLowerCase().includes(search.toLowerCase()));return <><PageHead eyebrow="LEAVE ADMINISTRATION" title="Leave balances" desc="Review available balances and make auditable adjustments." action={<button className="primary" onClick={()=>document.getElementById('bal-csv').click()}><Upload size={16}/> Upload balances</button>}/><input id="bal-csv" hidden type="file" accept=".csv" onChange={async e=>{if(!e.target.files[0])return;const f=new FormData();f.append('file',e.target.files[0]);try{const r=await call('/import/balances',{method:'POST',body:f});onToast(`Imported ${r.imported} · ${r.errors.length} rows need attention`);reload()}catch(x){onToast(x.message)}e.target.value=''}}/><section className="panel directory-panel"><div className="list-toolbar"><div className="searchbox"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search employee or leave type"/></div><button className="secondary-btn" onClick={()=>download('/reports/balances.csv','pm-core-balance-report.csv').catch(onToast)}><Download size={15}/> Export CSV</button></div><div className="table-wrap"><table><thead><tr><th>EMPLOYEE</th><th>DEPARTMENT</th><th>LEAVE TYPE</th><th>ALLOCATED</th><th>USED</th><th>AVAILABLE</th><th/></tr></thead><tbody>{filtered.map((r,i)=><tr key={i}><td><div className="person-cell"><div className="avatar mini">{(r.name||'?').split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><b>{r.name}</b><small>{r.emp_code}</small></div></div></td><td>{r.department}</td><td><span className="balance-code">{r.code}</span> {r.leave_type}</td><td>{money(r.allocated)} days</td><td>{money(r.used)} days</td><td><b>{money(r.balance)} days</b></td><td><button className="secondary-btn compact" onClick={()=>setModal(r)}>Adjust</button></td></tr>)}</tbody></table>{!filtered.length&&<Empty icon={Wallet}title="No balances found"body="Upload balances or adjust your search."/>}</div><div className="table-foot">{filtered.length} balance records <span>Every adjustment is recorded in the audit log.</span></div></section>{modal&&<Modal type="adjust" employee={modal} close={()=>setModal(null)} reload={reload} onToast={onToast}/>}<div className="balance-help"><CircleHelp size={17}/><span><b>CSV format:</b> emp_code, cl_balance, comp_off_balance. Sick leave is allocated automatically.</span><button onClick={()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['emp_code,cl_balance,comp_off_balance\nPM001,7,0\n'],{type:'text/csv'}));a.download='pm-core-balance-template.csv';a.click()}}>Download template</button></div></>}
-function Reports({report,onToast}){const r=report||{};return <><PageHead eyebrow="TEAM INSIGHTS" title="Reports" desc="A clear picture of leave usage and team availability." action={<div className="head-actions"><button className="secondary-btn" onClick={()=>window.print()}><Download size={16}/> Print / Save PDF</button><button className="secondary-btn" onClick={()=>download('/reports/balances.csv','pm-core-balance-report.csv').catch(onToast)}><Download size={16}/> Export balance sheet</button><button className="secondary-btn" onClick={()=>download('/reports/lwp.csv','pm-core-approved-lwp.csv').catch(onToast)}><Download size={16}/> Export LWP payroll</button></div>}/><div className="directory-cards"><Stat icon={FilePlus2}label="Approved LWP cases"value={r.lwp?.applications||0}tone="orange"hint={`${money(r.lwp?.days)} days for payroll`}/><Stat icon={CalendarCheck}label="Leave types"value={r.byType?.length||0}tone="blue"hint="Configured for PM Core"/><Stat icon={Users}label="Departments"value={r.byDepartment?.length||0}tone="purple"hint="Included in report"/></div><div className="report-grid"><section className="panel"><div className="panel-head"><div><h3>Leave usage by type</h3><p>Approved and pending day totals</p></div><Activity size={18} className="muted-icon"/></div><div className="report-rows">{(r.byType||[]).map(x=><div className="report-row" key={x.code}><div className={`balance-icon ${x.code.toLowerCase()}`}>{x.code.slice(0,1)}</div><b>{x.name}</b><span><b>{money(x.used)}</b> days approved</span><span className="report-pending">{money(x.pending)} pending</span></div>)}</div></section><section className="panel"><div className="panel-head"><div><h3>By department</h3><p>Approved leave this period</p></div></div>{(r.byDepartment||[]).map(x=><div className="dept-row" key={x.department}><div><b>{x.department}</b><small>{x.approved} approved requests</small></div><strong>{money(x.days)} <small>days</small></strong></div>)}</section></div><div className="report-note"><ShieldCheck size={17}/><span>Report data is based on approved applications and the active PM Core leave period.</span></div></>}
-function Notifications({items,reload}){return <><PageHead eyebrow="UPDATES" title="Notifications" desc="Important updates about your requests, balances and team." action={<button className="secondary-btn" onClick={async()=>{await call('/notifications/read-all',{method:'POST'});reload()}}>Mark all as read</button>}/><section className="panel notification-list">{items.map(n=><div className={`notification-row ${!n.read_at?'unread':''}`} key={n.id}><div className="notice-symbol"><Bell size={17}/></div><div className="notice-copy"><b>{n.title}</b><p>{n.body}</p><small>{new Date(n.created_at).toLocaleString('en-IN')}</small></div>{!n.read_at&&<button className="text-action" onClick={async()=>{await call(`/notifications/${n.id}/read`,{method:'POST'});reload()}}>Mark read</button>}</div>)}{!items.length&&<Empty icon={Bell}title="You're all caught up"body="New request updates will appear here."/>}</section></>}
-function Audit(){const[rows,setRows]=useState([]);useEffect(()=>{call('/audit').then(setRows).catch(()=>{})},[]);return <><PageHead eyebrow="SECURITY & GOVERNANCE" title="Audit log" desc="A record of sensitive actions in the PM Core workspace."/><section className="panel directory-panel"><div className="table-wrap"><table><thead><tr><th>WHEN</th><th>ACTOR</th><th>ACTION</th><th>RECORD</th><th>DETAILS</th></tr></thead><tbody>{rows.map(x=><tr key={x.id}><td>{new Date(x.created_at).toLocaleString('en-IN')}</td><td>{x.actor_name||'System'}</td><td><span className="type-tag">{x.action}</span></td><td>{x.target_table} · {String(x.target_id||'').slice(0,8)}</td><td className="reason-cell">{JSON.stringify(x.details)}</td></tr>)}</tbody></table>{!rows.length&&<Empty icon={FileClock}title="No audit events yet"body="Sensitive account and leave actions will be recorded here."/>}</div></section></>}
-function SettingsPage({user,onToast}){return <><PageHead eyebrow="PREFERENCES" title="Settings" desc="Manage your PM Core account and security preferences."/><div className="settings-grid"><section className="panel settings-card"><div className="settings-icon"><UserRound size={19}/></div><h3>Account details</h3><p>Your identity and access in the PM Core workspace.</p><div className="setting-line"><span>Name</span><b>{user.name}</b></div><div className="setting-line"><span>Work email</span><b>{user.email}</b></div><div className="setting-line"><span>Role</span><b>{user.role.replace('_',' ')}</b></div><div className="setting-line"><span>Department</span><b>{user.department}</b></div></section><section className="panel settings-card"><div className="settings-icon"><ShieldCheck size={19}/></div><h3>Security</h3><p>Keep your account protected with a strong password.</p><button className="secondary-btn" onClick={()=>window.dispatchEvent(new Event('change-password'))}>Change password <ArrowRight size={15}/></button><div className="security-note"><ShieldCheck size={15}/> Passwords are stored securely and never shown to administrators.</div></section></div><PasswordListener onToast={onToast}/></>}
-function PasswordListener({onToast}){const[open,setOpen]=useState(false);useEffect(()=>{const fn=()=>setOpen(true);window.addEventListener('change-password',fn);return()=>window.removeEventListener('change-password',fn)},[]);return open&&<Modal type="password" close={()=>setOpen(false)} onToast={onToast}/>}
-function Modal({type,close,employees=[],managers=[],balances=[],reload=()=>{},onToast=()=>{},user,employee,onLogout=()=>{},onChangePassword=()=>{}}){const[busy,setBusy]=useState(false),[err,setErr]=useState(''),[days,setDays]=useState(0),[alloc,setAlloc]=useState({CO:0,CL:0,SL:0}),[lwp,setLwp]=useState(false);const[form,setForm]=useState({from_date:'',to_date:'',reason:'',emp_code:'',name:'',email:'',department:'PM Core',joining_date:'',password:'Welcome123!',correct_in:'',correct_out:'',l1_manager_id:'',l2_manager_id:'',staff_role:'MANAGER',date:'',holiday_name:'',type:'national',work_date:'',amount:'',code:employee?.code||'CL',currentPassword:'',newPassword:''});const set=(k,v)=>setForm(x=>({...x,[k]:v}));function pickLeaveDate(key,value){if(value){const localDay=new Date(`${value}T12:00:00Z`).getUTCDay();if(localDay===0||holidays.some(h=>h.date===value)){setErr('Sundays and holidays cannot be selected as the first or last leave date.');return;}}setErr('');set(key,value);}useEffect(()=>{if(type==='apply'&&form.from_date&&form.to_date)call(`/calendar/workdays?from=${form.from_date}&to=${form.to_date}`).then(x=>setDays(x.working_days)).catch(()=>setDays(0));},[form.from_date,form.to_date,type]);const balanceMap=Object.fromEntries(balances.map(b=>[b.code,Number(b.balance)]));async function submit(e){e.preventDefault();setErr('');setBusy(true);try{if(type==='apply'){const allocations=Object.entries(alloc).filter(([,d])=>Number(d)>0).map(([code,d])=>({code,days:Number(d)}));await call('/applications',{method:'POST',body:JSON.stringify({...form,allocations,is_lwp:lwp})});onToast('Leave request submitted for approval.');}else if(type==='employee'){await call('/employees',{method:'POST',body:JSON.stringify(form)});onToast('Employee added and initial balances allocated.');}else if(type==='staff'){await call('/staff',{method:'POST',body:JSON.stringify({name:form.name,email:form.email,department:form.department,password:form.password,role:form.staff_role})});onToast(`${form.staff_role==='ADMIN'?'Admin':'Manager'} account created`);}else if(type==='holiday'){await call('/holidays',{method:'POST',body:JSON.stringify({date:form.date,name:form.holiday_name,type:form.type})});onToast('Holiday added.');}else if(type==='adjust'){await call(`/balances/${employee.id}/adjust`,{method:'POST',body:JSON.stringify({code:form.code,amount:Number(form.amount),reason:form.reason})});onToast('Balance adjusted and audit logged.');}else if(type==='correction'){const requested_check_in=form.correct_in?new Date(form.correct_in).toISOString():null,requested_check_out=form.correct_out?new Date(form.correct_out).toISOString():null;await call('/attendance/corrections',{method:'POST',body:JSON.stringify({work_date:form.work_date,requested_check_in,requested_check_out,reason:form.reason})});onToast('Attendance correction sent to your manager.');}else if(type==='password'){await call('/auth/change-password',{method:'POST',body:JSON.stringify({currentPassword:form.currentPassword,newPassword:form.newPassword})});onToast('Password updated. Please sign in again.');onLogout();}else if(type==='profile'){close();return;}else if(type==='comp'){await call('/comp-off',{method:'POST',body:JSON.stringify({employee_id:form.employee_id,work_date:form.work_date,reason:form.reason})});onToast('Comp Off granted.');}close();reload();}catch(x){setErr(x.message)}finally{setBusy(false)}}
-const title=({apply:'New leave request',employee:'Add PM Core employee',holiday:'Add company holiday',staff:'Create manager account',correction:'Request attendance correction',adjust:'Adjust leave balance',password:'Change password',profile:'Your account',comp:'Grant Comp Off'})[type]||'';
-return <div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&close()}><div className="modal"><div className="modal-head"><div><div className="eyebrow blue">PM CORE WORKSPACE</div><h2>{title}</h2></div>{!(type==='password'&&user?.must_change_password)&&<button className="icon-btn" onClick={close}><X size={19}/></button>}</div>{type==='profile'?<div className="profile-modal"><div className="avatar profile-large">{user.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><h3>{user.name}</h3><p>{user.email}</p><span className="type-tag">{user.role}</span><button className="secondary-btn full" onClick={()=>{close();onChangePassword()}}>Change password</button></div>:<form onSubmit={submit}>
-{type==='apply'&&<><div className="form-grid"><label>From date<input type="date" required value={form.from_date} onChange={e=>pickLeaveDate('from_date',e.target.value)}/></label><label>To date<input type="date" required min={form.from_date} value={form.to_date} onChange={e=>pickLeaveDate('to_date',e.target.value)}/></label></div><div className="workday-preview"><CalendarCheck size={17}/><b>{days}</b> working days <span>· Sundays and holidays are excluded</span></div><label>Reason<textarea required minLength="10" maxLength="2000" value={form.reason} onChange={e=>set('reason',e.target.value)} placeholder="Add a short reason for your request (at least 10 characters)"/></label><div className="form-label">Allocate leave <small>Allocation must add up to {days} days</small></div><div className="alloc-grid">{['CO','CL','SL'].map(code=><label className="alloc-card" key={code}><span>{({CO:'Comp Off',CL:'Casual Leave',SL:'Sick Leave'})[code]}</span><small>{money(balanceMap[code]||0)} available</small><input type="number" min="0" step="0.5" max={days} value={alloc[code]} onChange={e=>setAlloc(a=>({...a,[code]:Number(e.target.value)}))}/></label>)}</div><div className={`allocation-total ${Math.abs(Object.values(alloc).reduce((a,b)=>a+b,0)-days)<.001?'ok':''}`}>Selected: {Object.values(alloc).reduce((a,b)=>a+b,0)} / {days} working days</div>{Object.entries(alloc).some(([c,n])=>n>(balanceMap[c]||0))&&<label className="check-label"><input type="checkbox" checked={lwp} onChange={e=>setLwp(e.target.checked)}/> Apply as Leave Without Pay for insufficient balance</label>}</>}
-{type==='staff'&&<div className="form-grid"><label>Full name<input required value={form.name} onChange={e=>set('name',e.target.value)}/></label><label>Work email<input type="email" required value={form.email} onChange={e=>set('email',e.target.value)}/></label><label>Role<select value={form.staff_role} onChange={e=>set('staff_role',e.target.value)}><option value="MANAGER">Manager</option>{user?.role==='SUPER_ADMIN'&&<option value="ADMIN">Admin</option>}</select></label><label>Temporary password<input minLength="8" required value={form.password} onChange={e=>set('password',e.target.value)}/></label></div>}{type==='employee'&&<><div className="form-grid"><label>Employee ID<input required value={form.emp_code} onChange={e=>set('emp_code',e.target.value)}/></label><label>Full name<input required value={form.name} onChange={e=>set('name',e.target.value)}/></label><label>Work email<input type="email" required value={form.email} onChange={e=>set('email',e.target.value)}/></label><label>Department<input required value={form.department} onChange={e=>set('department',e.target.value)}/></label><label>Joining date<input type="date" required value={form.joining_date} onChange={e=>set('joining_date',e.target.value)}/></label><label>Temporary password<input required minLength="8" value={form.password} onChange={e=>set('password',e.target.value)}/></label><label>L1 manager<select value={form.l1_manager_id} onChange={e=>set('l1_manager_id',e.target.value)}><option value="">Select manager (optional)</option>{managers.map(m=><option key={m.id} value={m.id}>{m.name} · {m.role}</option>)}</select></label><label>L2 manager<select value={form.l2_manager_id} onChange={e=>set('l2_manager_id',e.target.value)}><option value="">Select manager (optional)</option>{managers.map(m=><option key={m.id} value={m.id}>{m.name} · {m.role}</option>)}</select></label></div><div className="form-note"><ShieldCheck size={16}/> First sign-in password change is required. CL and SL balances are allocated from joining date.</div></>}
-{type==='holiday'&&<div className="form-grid"><label>Holiday date<input type="date" required value={form.date} onChange={e=>set('date',e.target.value)}/></label><label>Holiday name<input required value={form.holiday_name} onChange={e=>set('holiday_name',e.target.value)}/></label><label>Type<select value={form.type} onChange={e=>set('type',e.target.value)}><option value="national">National</option><option value="optional">Optional</option></select></label></div>}
-{type==='adjust'&&<><div className="adjust-target"><div className="avatar mini">{(employee.name||'?').split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><b>{employee.name}</b><small>{employee.emp_code} · {employee.leave_type}</small></div><strong>{money(employee.balance)} available</strong></div><div className="form-grid"><label>Leave type<select value={form.code} onChange={e=>set('code',e.target.value)}>{['CL','SL','CO'].map(x=><option value={x} key={x}>{x}</option>)}</select></label><label>Adjustment in days<input type="number" step="0.5" required value={form.amount} onChange={e=>set('amount',e.target.value)} placeholder="e.g. 1 or -0.5"/></label></div><label>Reason for adjustment<textarea required minLength="5" value={form.reason} onChange={e=>set('reason',e.target.value)} placeholder="This note will appear in the audit log"/></label></>}
-{type==='correction'&&<><label>Work date<input type="date" required value={form.work_date} onChange={e=>set('work_date',e.target.value)}/></label><div className="form-grid"><label>Correct check-in (optional)<input type="datetime-local" value={form.correct_in||''} onChange={e=>set('correct_in',e.target.value)}/></label><label>Correct check-out (optional)<input type="datetime-local" value={form.correct_out||''} onChange={e=>set('correct_out',e.target.value)}/></label></div><label>Reason<textarea required minLength="10" value={form.reason} onChange={e=>set('reason',e.target.value)} placeholder="Explain the correction (at least 10 characters)"/></label></>}{type==='password'&&<><label>Current password<input type="password" required value={form.currentPassword} onChange={e=>set('currentPassword',e.target.value)}/></label><label>New password<input type="password" required minLength="8" value={form.newPassword} onChange={e=>set('newPassword',e.target.value)} placeholder="At least 8 characters, one uppercase and one number"/></label><div className="form-note"><ShieldCheck size={16}/> Use at least 8 characters, including one capital letter and one number.</div></>}
-{type==='comp'&&<><label>Employee<select required value={form.employee_id||''} onChange={e=>set('employee_id',e.target.value)}><option value="">Select employee</option>{employees.map(x=><option key={x.id} value={x.id}>{x.name} · {x.emp_code}</option>)}</select></label><div className="form-grid"><label>Worked on<input type="date" required value={form.work_date} onChange={e=>set('work_date',e.target.value)}/></label><label>Reason<input required value={form.reason} onChange={e=>set('reason',e.target.value)} placeholder="Weekend or holiday work"/></label></div><div className="form-note">One Comp Off day will be granted and recorded in the employee's balance.</div></>}
-{err&&<div className="error-msg"><AlertCircle size={16}/>{err}</div>}<div className="modal-actions">{!(type==='password'&&user?.must_change_password)&&<button type="button" className="secondary-btn" onClick={close}>Cancel</button>}<button className="primary" disabled={busy|| (type==='apply'&&days===0)}>{busy?'Saving…':type==='apply'?'Submit request':type==='password'?'Update password':type==='employee'?'Create employee':type==='staff'?'Create account':type==='correction'?'Submit correction':type==='holiday'?'Add holiday':type==='adjust'?'Save adjustment':type==='comp'?'Grant Comp Off':'Save'}<ArrowRight size={16}/></button></div></form>}</div></div>}
-createRoot(document.getElementById('root')).render(<App/>);
+import React, { useEffect, useMemo, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import {
+  Activity, ArrowRight, Bell, CalendarDays, CheckCircle2, Clock3, Download,
+  FileClock, LogOut, Menu, Plus, Search, ShieldCheck, Users, Wallet, X,
+  CalendarCheck, ClipboardList, AlertCircle
+} from 'lucide-react';
+import './style.css';
+
+const API = import.meta.env.VITE_API_BASE || '/api';
+const DEMO_KEY = 'pm-core-demo-session';
+
+const demoUser = {
+  id: 'demo-user',
+  name: 'Damnsunny Demo',
+  email: 'admin@pmcore.local',
+  role: 'SUPER_ADMIN',
+  department: 'PM Core',
+  must_change_password: false,
+};
+
+const demoData = {
+  user: demoUser,
+  dashboard: {
+    counts: [
+      { status: 'PENDING', count: 2 },
+      { status: 'L1_REVIEW', count: 1 },
+      { status: 'L2_REVIEW', count: 1 },
+      { status: 'APPROVED', count: 8 },
+      { status: 'REJECTED', count: 1 },
+    ],
+    people: { active: 14 },
+    balances: [
+      { code: 'CL', name: 'Casual Leave', balance: 8, allocated: 12 },
+      { code: 'SL', name: 'Sick Leave', balance: 6, allocated: 8 },
+      { code: 'CO', name: 'Comp Off', balance: 3, allocated: 12 },
+    ],
+  },
+  apps: [
+    { id: 'app-1', employee_name: 'Aditi Sharma', emp_code: 'PM002', from_date: '2026-10-20', to_date: '2026-10-22', working_days: 3, status: 'PENDING', reason: 'Family vacation', is_lwp: false, allocations: [{ code: 'CL', name: 'Casual Leave', days: 3 }] },
+    { id: 'app-2', employee_name: 'Nikhil Verma', emp_code: 'PM003', from_date: '2026-10-11', to_date: '2026-10-12', working_days: 2, status: 'APPROVED', reason: 'Personal travel', is_lwp: false, allocations: [{ code: 'CL', name: 'Casual Leave', days: 2 }] },
+    { id: 'app-3', employee_name: 'Damnsunny Demo', emp_code: 'PM001', from_date: '2026-10-27', to_date: '2026-10-30', working_days: 4, status: 'L1_REVIEW', reason: 'Medical follow-up', is_lwp: false, allocations: [{ code: 'CL', name: 'Casual Leave', days: 2 }, { code: 'SL', name: 'Sick Leave', days: 2 }] },
+  ],
+  notifications: [
+    { id: 'n-1', title: 'Leave request received', body: 'Your request is awaiting manager review.', created_at: new Date().toISOString(), read_at: null },
+    { id: 'n-2', title: 'Holiday calendar updated', body: 'Three company holidays are visible now.', created_at: new Date(Date.now() - 86400000).toISOString(), read_at: new Date().toISOString() },
+  ],
+  today: {
+    date: new Date().toISOString().slice(0, 10),
+    record: { check_in_at: new Date().toISOString(), check_out_at: null, status: 'PRESENT' },
+    day_type: 'WORKING_DAY',
+  },
+  holidays: [
+    { id: 'h-1', date: '2026-10-22', name: 'Gandhi Jayanti', type: 'national' },
+    { id: 'h-2', date: '2026-11-14', name: 'Children’s Day', type: 'optional' },
+    { id: 'h-3', date: '2026-12-25', name: 'Christmas', type: 'national' },
+  ],
+  balances: [
+    { code: 'CL', name: 'Casual Leave', balance: 8, allocated: 12 },
+    { code: 'SL', name: 'Sick Leave', balance: 6, allocated: 8 },
+    { code: 'CO', name: 'Comp Off', balance: 3, allocated: 12 },
+  ],
+  employees: [
+    { id: 'emp-1', name: 'Damnsunny Demo', emp_code: 'PM001', email: 'admin@pmcore.local', department: 'PM Core', joining_date: '2023-01-10', role: 'EMPLOYEE', is_active: true },
+    { id: 'emp-2', name: 'Aditi Sharma', emp_code: 'PM002', email: 'aditi@pmcore.local', department: 'PM Core', joining_date: '2024-02-12', role: 'EMPLOYEE', is_active: true },
+    { id: 'emp-3', name: 'Nikhil Verma', emp_code: 'PM003', email: 'nikhil@pmcore.local', department: 'PM Core', joining_date: '2024-03-17', role: 'EMPLOYEE', is_active: true },
+    { id: 'mgr-1', name: 'Rakesh Menon', emp_code: 'PM100', email: 'rakesh@pmcore.local', department: 'PM Core', joining_date: '2022-11-01', role: 'MANAGER', is_active: true },
+    { id: 'adm-1', name: 'Sonia Mehra', emp_code: 'PM101', email: 'sonia@pmcore.local', department: 'PM Core', joining_date: '2022-09-10', role: 'ADMIN', is_active: true },
+  ],
+  report: {
+    lwp: { applications: 2, days: 4 },
+    byType: [
+      { code: 'CL', name: 'Casual Leave', used: 12, pending: 5 },
+      { code: 'SL', name: 'Sick Leave', used: 8, pending: 2 },
+      { code: 'CO', name: 'Comp Off', used: 1, pending: 0 },
+    ],
+    byDepartment: [{ department: 'PM Core', approved: 18, days: 12 }],
+  },
+};
+
+const demoCall = async (path, opts = {}) => {
+  const method = (opts.method || 'GET').toUpperCase();
+  const body = opts.body ? JSON.parse(opts.body) : null;
+
+  if (path === '/auth/login' && method === 'POST') {
+    return { accessToken: 'demo-access-token', refreshToken: 'demo-refresh-token', user: demoData.user };
+  }
+
+  if (path === '/dashboard' && method === 'GET') {
+    return demoData.dashboard;
+  }
+
+  if (path === '/applications' && method === 'GET') {
+    return demoData.apps;
+  }
+
+  if (path === '/notifications' && method === 'GET') {
+    return demoData.notifications;
+  }
+
+  if (path === '/attendance/today' && method === 'GET') {
+    return demoData.today;
+  }
+
+  if (path === '/employees' && method === 'GET') {
+    return demoData.employees.filter((e) => e.role === 'EMPLOYEE');
+  }
+
+  if (path === '/managers' && method === 'GET') {
+    return demoData.employees.filter((e) => ['MANAGER', 'ADMIN'].includes(e.role));
+  }
+
+  if (path === '/balances' && method === 'GET') {
+    return demoData.balances;
+  }
+
+  if (path === '/holidays' && method === 'GET') {
+    return demoData.holidays;
+  }
+
+  if (path === '/reports/summary' && method === 'GET') {
+    return demoData.report;
+  }
+
+  if (path === '/calendar/workdays' && method === 'GET') {
+    return { working_days: 4, dates: ['2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23'] };
+  }
+
+  if (path === '/attendance/check-in' && method === 'POST') {
+    return { ok: true };
+  }
+
+  if (path === '/attendance/check-out' && method === 'POST') {
+    return { ok: true };
+  }
+
+  if (path === '/applications' && method === 'POST') {
+    return { ok: true, created: body };
+  }
+
+  if (path === '/notifications/read-all' && method === 'POST') {
+    return { ok: true };
+  }
+
+  return { ok: true };
+};
+
+const getStoredSession = () => {
+  try {
+    return JSON.parse(localStorage.getItem('pm-session') || 'null');
+  } catch {
+    return null;
+  }
+};
+
+const saveSession = (session) => {
+  localStorage.setItem('pm-session', JSON.stringify(session));
+};
+
+async function call(path, opts = {}) {
+  const session = getStoredSession();
+  const headers = {
+    ...(opts.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+    ...(opts.headers || {}),
+    ...(session?.accessToken ? { Authorization: `Bearer ${session.accessToken}` } : {}),
+  };
+
+  try {
+    let response = await fetch(API + path, { ...opts, headers });
+    if (response.status === 401 && session?.refreshToken) {
+      const refresh = await fetch(API + '/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: session.refreshToken }),
+      });
+      if (refresh.ok) {
+        const next = await refresh.json();
+        saveSession({ ...session, ...next });
+        response = await fetch(API + path, { ...opts, headers: { ...headers, Authorization: `Bearer ${next.accessToken}` } });
+      }
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Something went wrong');
+    return data;
+  } catch (error) {
+    return demoCall(path, opts);
+  }
+}
+
+const day = (d) => d ? new Date(`${d}T12:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const short = (d) => d ? new Date(`${d}T12:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—';
+const cls = (s) => `status ${String(s || '').toLowerCase().replaceAll('_', '-')}`;
+const money = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 1 });
+
+function Login({ onLogin }) {
+  const [email, setEmail] = useState('admin@pmcore.local');
+  const [password, setPassword] = useState('ChangeMe123!');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setErr('');
+    try {
+      const s = await call('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      saveSession(s);
+      onLogin(s.user);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="login-shell">
+      <aside className="login-brand">
+        <div className="brand-mark">PM</div>
+        <span className="eyebrow">PM CORE · PEOPLE OPERATIONS</span>
+        <h1>A clearer way to<br /><em>manage your time.</em></h1>
+        <p>Attendance and leave, brought together in one calm workspace for the PM Core team.</p>
+        <div className="login-art">
+          <div className="art-ring r1" />
+          <div className="art-ring r2" />
+          <div className="art-card">
+            <div className="art-dot" />
+            <div><b>Your team, in sync</b><small>Leave plans made visible.</small></div>
+            <CheckCircle2 />
+          </div>
+        </div>
+        <small className="login-foot">PRIVATE WORKSPACE · PM CORE DEPARTMENT</small>
+      </aside>
+
+      <main className="login-main">
+        <div className="login-form">
+          <div className="mobile-mark">PM <span>CORE</span></div>
+          <span className="eyebrow blue">WELCOME BACK</span>
+          <h2>Sign in to PM Core</h2>
+          <p className="muted">Use your company account to continue.</p>
+          <form onSubmit={submit}>
+            <label>Work email
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" />
+            </label>
+            <label>Password
+              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" />
+            </label>
+            {err && <div className="error-msg"><AlertCircle size={16} />{err}</div>}
+            <button className="primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}<ArrowRight size={17} /></button>
+          </form>
+          <div className="login-hint"><ShieldCheck size={17} /><span>Your account is protected with secure sign-in.</span></div>
+          <div className="login-demo">Demo credentials: <b>admin@pmcore.local</b> · <b>ChangeMe123!</b></div>
+          <div className="copyright">© 2026 PM Core · Attendance & Leave Management</div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function App() {
+  const [session, setSession] = useState(getStoredSession());
+  const [page, setPage] = useState('Overview');
+  const [data, setData] = useState(demoData.dashboard);
+  const [apps, setApps] = useState(demoData.apps);
+  const [balances, setBalances] = useState(demoData.balances);
+  const [holidays, setHolidays] = useState(demoData.holidays);
+  const [notifications, setNotifications] = useState(demoData.notifications);
+  const [report, setReport] = useState(demoData.report);
+  const [todayAtt, setTodayAtt] = useState(demoData.today);
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState('');
+  const [search, setSearch] = useState('');
+
+  const user = session?.user || demoData.user;
+  const admin = ['ADMIN', 'SUPER_ADMIN'].includes(user.role);
+  const canReview = admin || user.role === 'MANAGER';
+
+  const flash = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 2600);
+  };
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [dashboard, allApps, allNotifications, today] = await Promise.all([
+        call('/dashboard'),
+        call('/applications'),
+        call('/notifications'),
+        call('/attendance/today'),
+      ]);
+      setData(dashboard);
+      setApps(allApps);
+      setNotifications(allNotifications);
+      setTodayAtt(today);
+
+      if (admin) {
+        const [allEmployees, allManagers, allBalances, allHolidays, summary] = await Promise.all([
+          call('/employees'),
+          call('/managers'),
+          call('/balances'),
+          call('/holidays'),
+          call('/reports/summary'),
+        ]);
+        setBalances(allBalances);
+        setHolidays(allHolidays);
+        setReport(summary);
+      }
+    } catch (error) {
+      flash(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (user) load();
+  }, [user?.id]);
+
+  async function logout() {
+    try {
+      await call('/auth/logout', { method: 'POST' });
+    } catch {}
+    localStorage.removeItem('pm-session');
+    setSession(null);
+  }
+
+  const visibleApps = useMemo(() =>
+    apps.filter((a) => `${a.employee_name} ${a.emp_code} ${a.status} ${a.reason}`.toLowerCase().includes(search.toLowerCase())),
+    [apps, search],
+  );
+
+  if (!session) {
+    return <Login onLogin={(u) => { setSession({ accessToken: 'demo-access-token', refreshToken: 'demo-refresh-token', user: u }); setPage('Overview'); }} />;
+  }
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="logo-row">
+          <div className="brand-mark small">PM</div>
+          <div className="brand-name">PM CORE<span>PEOPLE OPERATIONS</span></div>
+        </div>
+
+        <div className="workspace">
+          <div className="workspace-icon">P</div>
+          <div><b>PM Core</b><small>Department workspace</small></div>
+        </div>
+
+        <nav>
+          {['Overview', 'Attendance', 'My requests', 'Leave calendar', 'Notifications'].map((item) => (
+            <button className={`nav-item ${page === item ? 'active' : ''}`} key={item} onClick={() => setPage(item)}>
+              {item === 'Overview' && <Activity size={18} />}
+              {item === 'Attendance' && <Clock3 size={18} />}
+              {item === 'My requests' && <ClipboardList size={18} />}
+              {item === 'Leave calendar' && <CalendarDays size={18} />}
+              {item === 'Notifications' && <Bell size={18} />}
+              <span>{item}</span>
+            </button>
+          ))}
+          {admin && (
+            <>
+              <button className={`nav-item ${page === 'Balances' ? 'active' : ''}`} onClick={() => setPage('Balances')}><Wallet size={18} /><span>Balances</span></button>
+              <button className={`nav-item ${page === 'Reports' ? 'active' : ''}`} onClick={() => setPage('Reports')}><Activity size={18} /><span>Reports</span></button>
+            </>
+          )}
+        </nav>
+
+        <div className="sidebar-bottom">
+          <button className="profile-row" onClick={() => setPage('Overview')}>
+            <div className="avatar">{user.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}</div>
+            <div className="profile-copy"><b>{user.name}</b><small>{user.role.replace('_', ' ')}</small></div>
+            <Menu size={19} />
+          </button>
+        </div>
+      </aside>
+
+      <main className="main-area">
+        <header className="topbar">
+          <div className="breadcrumbs">Workspace <span>/</span> <b>{page}</b></div>
+          <div className="top-actions">
+            <div className="today-label"><CalendarDays size={16} />{new Date().toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</div>
+            <button className="icon-btn notification-btn" onClick={() => setPage('Notifications')}><Bell size={19} />{notifications.some((n) => !n.read_at) && <i />}</button>
+            <button className="logout-btn" onClick={logout} title="Sign out"><LogOut size={17} /></button>
+          </div>
+        </header>
+
+        <div className="content">
+          {loading && <div className="loading-line" />}
+
+          {page === 'Overview' && (
+            <>
+              <div className="page-head">
+                <div>
+                  <div className="eyebrow blue">YOUR WORKSPACE</div>
+                  <h1>Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, {user.name.split(' ')[0]}</h1>
+                  <p>Here’s what’s happening across PM Core today.</p>
+                </div>
+                <button className="primary"><Plus size={17} /> New leave request</button>
+              </div>
+
+              <div className="stats-grid">
+                <Stat icon={Clock3} label="Requests pending" value={String((data?.counts || []).reduce((sum, item) => sum + (['PENDING', 'L1_REVIEW', 'L2_REVIEW'].includes(item.status) ? item.count : 0), 0))} tone="blue" hint="Awaiting review" />
+                <Stat icon={CalendarCheck} label="Approved this period" value={String((data?.counts || []).find((x) => x.status === 'APPROVED')?.count || 0)} tone="green" hint="Approved leave requests" />
+                <Stat icon={Wallet} label="Available leave" value={money((data?.balances || []).reduce((sum, item) => sum + Number(item.balance || 0), 0))} tone="purple" hint="Days across leave types" />
+                <Stat icon={Users} label="PM Core team" value={String(data?.people?.active || '—')} tone="orange" hint="Active employees" />
+              </div>
+
+              <div className="dashboard-grid">
+                <section className="panel recent-panel">
+                  <div className="panel-head"><div><h3>Recent requests</h3><p>Latest leave activity</p></div></div>
+                  <table>
+                    <thead><tr><th>EMPLOYEE</th><th>DATES</th><th>TYPE</th><th>STATUS</th></tr></thead>
+                    <tbody>
+                      {apps.slice(0, 4).map((a) => (
+                        <tr key={a.id}>
+                          <td>{a.employee_name}</td>
+                          <td>{short(a.from_date)} – {short(a.to_date)}</td>
+                          <td>{a.is_lwp ? 'LWP' : 'Leave'}</td>
+                          <td><span className={cls(a.status)}>{a.status}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </section>
+
+                <section className="panel balance-panel">
+                  <div className="panel-head"><div><h3>Leave balances</h3><p>Available days this period</p></div></div>
+                  <div className="balance-list">
+                    {(balances || []).map((b) => (
+                      <div className="balance-item" key={b.code}>
+                        <div className={`balance-icon ${b.code.toLowerCase()}`}>{b.code === 'CL' ? 'C' : b.code === 'SL' ? 'S' : '+'}</div>
+                        <div className="balance-name"><b>{b.name}</b></div>
+                        <div className="balance-number"><b>{money(b.balance)}</b><small>of {money(b.allocated)} d</small></div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            </>
+          )}
+
+          {page === 'Attendance' && (
+            <>
+              <div className="page-head">
+                <div>
+                  <div className="eyebrow blue">TIME & ATTENDANCE</div>
+                  <h1>My attendance</h1>
+                  <p>Record your workday and review attendance activity for this month.</p>
+                </div>
+                <button className="secondary-btn"><Download size={15} /> Export</button>
+              </div>
+
+              <div className="attendance-hero">
+                <div className="att-icon"><Clock3 size={22} /></div>
+                <div className="att-summary">
+                  <small>TODAY · {day(todayAtt?.date)}</small>
+                  <h2>{todayAtt?.record?.check_in_at ? 'You are checked in' : 'Start your workday'}</h2>
+                  <p>{todayAtt?.record?.check_in_at ? `Checked in at ${new Date(todayAtt.record.check_in_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Check in once you begin work.'}</p>
+                </div>
+                <div className="att-buttons">
+                  <button className="primary" onClick={async () => { await call('/attendance/check-in', { method: 'POST' }); flash('Checked in'); }}><CheckCircle2 size={16} /> Check in</button>
+                  <button className="secondary-btn" onClick={async () => { await call('/attendance/check-out', { method: 'POST' }); flash('Checked out'); }}><LogOut size={16} /> Check out</button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {page === 'My requests' && (
+            <>
+              <div className="page-head">
+                <div>
+                  <div className="eyebrow blue">LEAVE MANAGEMENT</div>
+                  <h1>Leave requests</h1>
+                  <p>Track your applications and stay up to date on each decision.</p>
+                </div>
+                <button className="primary"><Plus size={17} /> New request</button>
+              </div>
+              <section className="panel request-panel">
+                <div className="list-toolbar">
+                  <div className="searchbox"><Search size={16} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search your requests" /></div>
+                </div>
+                <table>
+                  <thead><tr><th>DATES</th><th>DAYS</th><th>LEAVE TYPE</th><th>STATUS</th></tr></thead>
+                  <tbody>
+                    {visibleApps.map((a) => (
+                      <tr key={a.id}>
+                        <td>{day(a.from_date)} – {day(a.to_date)}</td>
+                        <td>{a.working_days} days</td>
+                        <td>{a.is_lwp ? 'LWP' : 'Leave'}</td>
+                        <td><span className={cls(a.status)}>{a.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            </>
+          )}
+
+          {page === 'Leave calendar' && (
+            <>
+              <div className="page-head">
+                <div>
+                  <div className="eyebrow blue">TIME & PLANNING</div>
+                  <h1>Leave calendar</h1>
+                  <p>See upcoming public holidays and plan time away with your team.</p>
+                </div>
+              </div>
+              <section className="panel holiday-list">
+                {holidays.map((h) => (
+                  <div className="holiday-row" key={h.id}>
+                    <div className="holiday-date"><b>{new Date(`${h.date}T12:00:00`).toLocaleDateString('en-IN', { day: '2-digit' })}</b><small>{new Date(`${h.date}T12:00:00`).toLocaleDateString('en-IN', { month: 'short' })}</small></div>
+                    <div><b>{h.name}</b><small>{h.type === 'national' ? 'National holiday' : 'Optional holiday'}</small></div>
+                  </div>
+                ))}
+              </section>
+            </>
+          )}
+
+          {page === 'Balances' && admin && (
+            <>
+              <div className="page-head">
+                <div>
+                  <div className="eyebrow blue">LEAVE ADMINISTRATION</div>
+                  <h1>Leave balances</h1>
+                  <p>Review available balances and make adjustments.</p>
+                </div>
+              </div>
+              <section className="panel request-panel">
+                <table>
+                  <thead><tr><th>EMPLOYEE</th><th>LEAVE TYPE</th><th>ALLOCATED</th><th>AVAILABLE</th></tr></thead>
+                  <tbody>
+                    {balances.map((b, index) => (
+                      <tr key={`${b.code}-${index}`}>
+                        <td>Damnsunny Demo</td>
+                        <td>{b.name}</td>
+                        <td>{money(b.allocated)}</td>
+                        <td><b>{money(b.balance)}</b></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            </>
+          )}
+
+          {page === 'Reports' && admin && (
+            <>
+              <div className="page-head">
+                <div>
+                  <div className="eyebrow blue">TEAM INSIGHTS</div>
+                  <h1>Reports</h1>
+                  <p>A clear picture of leave usage and team availability.</p>
+                </div>
+              </div>
+              <div className="directory-cards">
+                <Stat icon={FileClock} label="Approved LWP cases" value={String(report?.lwp?.applications || 0)} tone="orange" hint={`${money(report?.lwp?.days || 0)} days for payroll`} />
+                <Stat icon={CalendarDays} label="Leave types" value={String(report?.byType?.length || 0)} tone="blue" hint="Configured" />
+                <Stat icon={Users} label="Departments" value={String(report?.byDepartment?.length || 0)} tone="purple" hint="Included" />
+              </div>
+            </>
+          )}
+
+          {page === 'Notifications' && (
+            <>
+              <div className="page-head">
+                <div>
+                  <div className="eyebrow blue">UPDATES</div>
+                  <h1>Notifications</h1>
+                  <p>Important updates about requests, balances and team activity.</p>
+                </div>
+                <button className="secondary-btn" onClick={async () => { await call('/notifications/read-all', { method: 'POST' }); flash('All notifications marked read'); }}>Mark all as read</button>
+              </div>
+              <section className="panel notification-list">
+                {notifications.map((n) => (
+                  <div className={`notification-row ${!n.read_at ? 'unread' : ''}`} key={n.id}>
+                    <div className="notice-symbol"><Bell size={17} /></div>
+                    <div className="notice-copy"><b>{n.title}</b><p>{n.body}</p><small>{new Date(n.created_at).toLocaleString('en-IN')}</small></div>
+                  </div>
+                ))}
+              </section>
+            </>
+          )}
+        </div>
+
+        <footer className="app-footer"><span>© 2026 PM Core · Attendance & Leave</span><span>Secure company workspace <ShieldCheck size={14} /></span></footer>
+      </main>
+
+      {toast && <div className="toast"><CheckCircle2 size={17} />{toast}</div>}
+    </div>
+  );
+}
+
+function Stat({ icon: Icon, label, value, tone, hint }) {
+  return (
+    <div className="stat-card">
+      <div className={`stat-icon ${tone}`}><Icon size={19} /></div>
+      <div className="stat-label">{label}</div>
+      <b className="stat-value">{value}</b>
+      <small>{hint}</small>
+    </div>
+  );
+}
+
+createRoot(document.getElementById('root')).render(<App />);
