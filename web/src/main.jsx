@@ -250,7 +250,7 @@ function Login({ onLogin }) {
           </form>
           <div className="login-hint"><ShieldCheck size={17} /><span>Your account is protected with secure sign-in.</span></div>
           <div className="login-demo">Demo credentials: <b>admin@pmcore.local</b> · <b>ChangeMe123!</b></div>
-          <div className="copyright">© 2026 PM Core · Attendance & Leave Management</div>
+          <div className="copyright">© 2026 PM Core · Attendance & Leave Management · <a href="https://damnsunnyy.github.io/Attendance-Desk/">Live demo</a></div>
         </div>
       </main>
     </div>
