@@ -2,6 +2,8 @@
 
 **Live demo:** [https://damnsunnyy.github.io/Attendance-Desk/](https://damnsunnyy.github.io/Attendance-Desk/)
 
+> **Demo only:** The Pages site uses sample data and simulated actions; it is not connected to the attendance API or a database. Changes in the demo are not saved, and the demo must not be used for real employee records.
+
 Private, local-first attendance and leave management workspace for the PM Core department. The interface uses a responsive blue and white design. The stack is React + Vite, Express, PostgreSQL, and JWT sessions.
 
 ## Included
