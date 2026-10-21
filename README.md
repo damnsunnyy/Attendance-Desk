@@ -1,5 +1,7 @@
 # PM Core Attendance & Leave Management
 
+**Live demo:** [https://damnsunnyy.github.io/Attendance-Desk/](https://damnsunnyy.github.io/Attendance-Desk/)
+
 Private, local-first attendance and leave management workspace for the PM Core department. The interface uses a responsive blue and white design. The stack is React + Vite, Express, PostgreSQL, and JWT sessions.
 
 ## Included
